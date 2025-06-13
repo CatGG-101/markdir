@@ -1,4 +1,4 @@
-module markdir
+module github.com/catgg-101/markdir
 
 go 1.15
 
