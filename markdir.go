@@ -4,21 +4,21 @@ import (
 	"errors"
 	"flag"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/russross/blackfriday"
+	"github.com/russross/blackfriday/v2"
 )
 
 var bind = flag.String("bind", "127.0.0.1:19000", "port to run the server on")
+var dir = flag.String("d", ".", "directory to serve")
 
 func main() {
 	flag.Parse()
 
-	httpdir := http.Dir(".")
+	httpdir := http.Dir(*dir)
 	handler := renderer{httpdir, http.FileServer(httpdir)}
 
 	log.Println("Serving on http://" + *bind)
@@ -29,10 +29,27 @@ var outputTemplate = template.Must(template.New("base").Parse(`
 <html>
   <head>
     <title>{{ .Path }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="index.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown-light.min.css">
+	<style>
+		.markdown-body {
+			box-sizing: border-box;
+			min-width: 200px;
+			padding: 45px;
+		}
+		@media (max-width: 767px) {
+			.markdown-body {
+				padding: 15px;
+			}
+		}
+	</style>
   </head>
   <body>
-    {{ .Body }}
+    <article class="markdown-body">
+      {{ .Body }}
+    </article>
   </body>
 </html>
 `))
@@ -51,7 +68,7 @@ func (r renderer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// net/http is already running a path.Clean on the req.URL.Path,
 	// so this is not a directory traversal, at least by my testing
 	var pathErr *os.PathError
-	input, err := ioutil.ReadFile("." + req.URL.Path)
+	input, err := os.ReadFile(string(r.d) + req.URL.Path)
 	if errors.As(err, &pathErr) {
 		http.Error(rw, http.StatusText(http.StatusNotFound)+": "+req.URL.Path, http.StatusNotFound)
 		log.Printf("file not found: %s", err)
@@ -64,7 +81,7 @@ func (r renderer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	output := blackfriday.MarkdownCommon(input)
+	output := blackfriday.Run(input)
 
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 
